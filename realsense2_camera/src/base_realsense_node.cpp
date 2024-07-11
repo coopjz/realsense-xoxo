@@ -409,6 +409,7 @@ void BaseRealSenseNode::readAndSetDynamicParam(ros::NodeHandle& nh1, std::shared
     ddynrec->registerVariable<int>(
         option_name, *option_value, [this, sensor, option_name](int new_value){set_auto_exposure_roi(option_name, sensor, new_value);},
         "auto-exposure " + option_name + " coordinate", min_val, max_val);
+
 }
 
 void BaseRealSenseNode::registerAutoExposureROIOptions(ros::NodeHandle& nh)
@@ -448,6 +449,7 @@ void BaseRealSenseNode::registerDynamicOption(ros::NodeHandle& nh, rs2::options 
 {
     ros::NodeHandle nh1(nh, module_name);
     std::shared_ptr<ddynamic_reconfigure::DDynamicReconfigure> ddynrec = std::make_shared<ddynamic_reconfigure::DDynamicReconfigure>(nh1);
+    
     for (auto i = 0; i < RS2_OPTION_COUNT; i++)
     {
         rs2_option option = static_cast<rs2_option>(i);
@@ -581,6 +583,9 @@ void BaseRealSenseNode::registerDynamicOption(ros::NodeHandle& nh, rs2::options 
                         sensor.get_option_description(option), enum_dict);
                 }
             }
+        
+
+
         }
         catch(const rs2::backend_error& e)
         {
@@ -592,6 +597,31 @@ void BaseRealSenseNode::registerDynamicOption(ros::NodeHandle& nh, rs2::options 
         }
         
     }
+            // if (sensor.supports(RS2_OPTION_EMITTER_ENABLED))
+            // {
+            //     if (_enable_emitter)
+            //         sensor.set_option(RS2_OPTION_EMITTER_ENABLED, 1.f); // Enable emitter
+            //     else
+            //         sensor.set_option(RS2_OPTION_EMITTER_ENABLED, 0.f); // Disable emitter
+            // }
+            // if (sensor.supports(RS2_OPTION_LASER_POWER))
+            // {
+            //     // Query min and max values:
+            //     auto range = sensor.get_option_range(RS2_OPTION_LASER_POWER);
+            //     if (_enable_emitter)
+            //         sensor.set_option(RS2_OPTION_LASER_POWER, range.max); // Set max power
+            //     else
+            //         sensor.set_option(RS2_OPTION_LASER_POWER, 0.f); // Disable laser
+            // }
+            // if (sensor.supports(RS2_OPTION_EMITTER_ON_OFF)) // zxzx
+            // {
+            //     if (_emitter_on_off)
+            //         sensor.set_option(RS2_OPTION_EMITTER_ON_OFF, 1.f); // Enable emitter
+            //     else
+            //         sensor.set_option(RS2_OPTION_EMITTER_ON_OFF, 0.f); // Disable emitter
+            // }
+ 
+
     ddynrec->publishServicesTopics();
     _ddynrec.push_back(ddynrec);
 }
@@ -652,7 +682,8 @@ void BaseRealSenseNode::registerHDRoptions()
             }
         }
         sensor.set_option(RS2_OPTION_SEQUENCE_ID, 0);   // Set back to default.
-        sensor.set_option(RS2_OPTION_HDR_ENABLED, true);
+        sensor.set_option(RS2_OPTION_HDR_ENABLED, false);
+        // sensor.set_option(RS2_OPTION_HDR_ENABLED, false);
 
         monitor_update_functions(); // Start parameters update thread
 
@@ -743,6 +774,10 @@ void BaseRealSenseNode::getParameters()
     _pnh.param("tf_publish_rate", _tf_publish_rate, TF_PUBLISH_RATE);
 
     _pnh.param("enable_sync", _sync_frames, SYNC_FRAMES);
+    _pnh.param("enable_emitter", _enable_emitter, true);
+    _pnh.param("emitter_on_off", _emitter_on_off, false);
+    _pnh.param("enable_auto_exposure", _enable_auto_exposure, false);
+    _pnh.param("manual_exposure", _manual_exposure, 2000);
     if (_pointcloud || _align_depth || _filters_str.size() > 0)
         _sync_frames = true;
 
@@ -1190,6 +1225,7 @@ void BaseRealSenseNode::setupFilters()
     bool use_colorizer_filter(false);
     bool use_decimation_filter(false);
     bool use_hdr_filter(false);
+    bool use_sequence_id_filter(false);
     for (std::vector<std::string>::iterator s_iter=filters_str.begin(); s_iter!=filters_str.end(); s_iter++)
     {
         (*s_iter).erase(std::remove_if((*s_iter).begin(), (*s_iter).end(), isspace), (*s_iter).end()); // Remove spaces
@@ -1229,6 +1265,10 @@ void BaseRealSenseNode::setupFilters()
         {
             use_hdr_filter = true;
         }
+        else if ((*s_iter) == "sequence_id")
+        {
+            use_sequence_id_filter = true;
+        }
         else if ((*s_iter).size() > 0)
         {
             ROS_ERROR_STREAM("Unknown Filter: " << (*s_iter));
@@ -1246,6 +1286,11 @@ void BaseRealSenseNode::setupFilters()
     {
       ROS_INFO("Add Filter: hdr_merge");
       _filters.insert(_filters.begin(),NamedFilter("hdr_merge", std::make_shared<rs2::hdr_merge>()));
+      ROS_INFO("Add Filter: sequence_id_filter");
+      _filters.insert(_filters.begin(),NamedFilter("sequence_id_filter", std::make_shared<rs2::sequence_id_filter>()));
+    }
+     if (use_sequence_id_filter)
+    {
       ROS_INFO("Add Filter: sequence_id_filter");
       _filters.insert(_filters.begin(),NamedFilter("sequence_id_filter", std::make_shared<rs2::sequence_id_filter>()));
     }
@@ -1678,6 +1723,8 @@ void BaseRealSenseNode::frame_callback(rs2::frame frame)
                     continue;
                 if ((filter_it->_name == "align_to_color") && (!is_color_frame))
                     continue;
+                // if ((filter_it->_name == "sequence_id_filter") && (!original_depth_frame))
+                //     continue;
                 frameset = filter_it->_filter->process(frameset);
             }
 
@@ -2413,18 +2460,28 @@ void BaseRealSenseNode::publishFrame(rs2::frame f, const ros::Time& t,
         cam_info.header.stamp = t;
         cam_info.header.seq = seq[stream];
         info_publisher.publish(cam_info);
-
-        sensor_msgs::ImagePtr img;
-        img = cv_bridge::CvImage(std_msgs::Header(), encoding.at(stream.first), image).toImageMsg();
-        img->width = width;
-        img->height = height;
-        img->is_bigendian = false;
-        img->step = width * bpp;
-        img->header.frame_id = cam_info.header.frame_id;
-        img->header.stamp = t;
-        img->header.seq = seq[stream];
-
-        image_publisher.first.publish(img);
+        ROS_INFO("emitter_mode: %lld", f.get_frame_metadata(RS2_FRAME_METADATA_FRAME_EMITTER_MODE));
+        if ( 
+             (stream.first == rs2_stream::RS2_STREAM_COLOR) || 
+             (stream.first == rs2_stream::RS2_STREAM_DEPTH    && f.get_frame_metadata(RS2_FRAME_METADATA_FRAME_EMITTER_MODE) == 1 ) ||
+             (stream.first == rs2_stream::RS2_STREAM_INFRARED && f.get_frame_metadata(RS2_FRAME_METADATA_FRAME_EMITTER_MODE) != 1 ) )
+        {
+            // if ( !_emitter_on_off || 
+            //  (stream.first == rs2_stream::RS2_STREAM_COLOR) || 
+            //  (stream.first == rs2_stream::RS2_STREAM_DEPTH     ) ||
+            //  (stream.first == rs2_stream::RS2_STREAM_INFRARED   ) )
+        // {
+            sensor_msgs::ImagePtr img;
+            img = cv_bridge::CvImage(std_msgs::Header(), encoding.at(stream.first), image).toImageMsg();
+            img->width = width;
+            img->height = height;
+            img->is_bigendian = false;
+            img->step = width * bpp;
+            img->header.frame_id = cam_info.header.frame_id;
+            img->header.stamp = t;
+            img->header.seq = seq[stream];
+            image_publisher.first.publish(img);
+        }
         ROS_DEBUG("%s stream published", rs2_stream_to_string(f.get_profile().stream_type()));
     }
     if (is_publishMetadata)

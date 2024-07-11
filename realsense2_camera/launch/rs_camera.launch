@@ -1,7 +1,7 @@
 <launch>
   <arg name="serial_no"           default=""/>
   <arg name="usb_port_id"         default=""/>
-  <arg name="device_type"         default=""/>
+  <arg name="device_type"         default="d430"/>
   <arg name="json_file_path"      default=""/>
   <arg name="camera"              default="camera"/>
   <arg name="tf_prefix"           default="$(arg camera)"/>
@@ -14,29 +14,29 @@
   <arg name="fisheye_height"      default="-1"/>
   <arg name="enable_fisheye"      default="false"/>
 
-  <arg name="depth_width"         default="-1"/>
-  <arg name="depth_height"        default="-1"/>
+  <arg name="depth_width"         default="848"/>
+  <arg name="depth_height"        default="480"/>
   <arg name="enable_depth"        default="true"/>
 
   <arg name="confidence_width"    default="-1"/>
   <arg name="confidence_height"   default="-1"/>
-  <arg name="enable_confidence"   default="true"/>
+  <arg name="enable_confidence"   default="false"/>
   <arg name="confidence_fps"      default="-1"/>
 
   <arg name="infra_width"         default="848"/>
   <arg name="infra_height"        default="480"/>
-  <arg name="enable_infra"        default="false"/>
-  <arg name="enable_infra1"       default="false"/>
-  <arg name="enable_infra2"       default="false"/>
+  <arg name="enable_infra"        default="true"/>
+  <arg name="enable_infra1"       default="true"/>
+  <arg name="enable_infra2"       default="true"/>
   <arg name="infra_rgb"           default="false"/>
 
-  <arg name="color_width"         default="-1"/>
-  <arg name="color_height"        default="-1"/>
-  <arg name="enable_color"        default="true"/>
+  <arg name="color_width"         default="848"/>
+  <arg name="color_height"        default="480"/>
+  <arg name="enable_color"        default="false"/>
 
   <arg name="fisheye_fps"         default="-1"/>
-  <arg name="depth_fps"           default="-1"/>
-  <arg name="infra_fps"           default="30"/>
+  <arg name="depth_fps"           default="60"/>
+  <arg name="infra_fps"           default="60"/>
   <arg name="color_fps"           default="-1"/>
   <arg name="gyro_fps"            default="-1"/>
   <arg name="accel_fps"           default="-1"/>
@@ -46,10 +46,11 @@
   <arg name="enable_pointcloud"         default="false"/>
   <arg name="pointcloud_texture_stream" default="RS2_STREAM_COLOR"/>
   <arg name="pointcloud_texture_index"  default="0"/>
-  <arg name="allow_no_texture_points"   default="false"/>
+  <arg name="allow_no_texture_points"   default="true"/>
   <arg name="ordered_pc"                default="false"/>
-
-  <arg name="enable_sync"               default="false"/>
+  <arg name="enable_emitter"            default="true"/>
+  <arg name="emitter_on_off"            default="false"/> <!--If emitter_on_off=true, depth_fps must equal to infra_fps, and the actual output frame rate will be halved.-->
+  <arg name="enable_sync"               default="true"/>
   <arg name="align_depth"               default="false"/>
 
   <arg name="publish_tf"                default="true"/>
@@ -66,7 +67,7 @@
   <arg name="calib_odom_file"           default=""/>
   <arg name="publish_odom_tf"           default="true"/>
 
-  <arg name="stereo_module/exposure/1"  default="7500"/>
+  <arg name="stereo_module/exposure/1"  default="3300"/>
   <arg name="stereo_module/gain/1"      default="16"/>
   <arg name="stereo_module/exposure/2"  default="1"/>
   <arg name="stereo_module/gain/2"      default="16"/>
@@ -88,6 +89,8 @@
       <arg name="enable_pointcloud"        value="$(arg enable_pointcloud)"/>
       <arg name="pointcloud_texture_stream" value="$(arg pointcloud_texture_stream)"/>
       <arg name="pointcloud_texture_index"  value="$(arg pointcloud_texture_index)"/>
+      <arg name="enable_emitter"           value="$(arg enable_emitter)"/>
+      <arg name="emitter_on_off"           value="$(arg emitter_on_off)"/>
       <arg name="enable_sync"              value="$(arg enable_sync)"/>
       <arg name="align_depth"              value="$(arg align_depth)"/>
 
