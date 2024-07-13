@@ -226,7 +226,8 @@ namespace realsense2_camera
                           std::map<stream_index_pair, int>& seq,
                           std::map<stream_index_pair, sensor_msgs::CameraInfo>& camera_info,
                           const std::map<rs2_stream, std::string>& encoding,
-                          bool copy_data_from_frame = true);
+                          bool copy_data_from_frame = true, bool is_align_depth_frame = false);
+        
         void publishMetadata(rs2::frame f, const ros::Time& header_time, const std::string& frame_id);
         bool getEnabledProfile(const stream_index_pair& stream_index, rs2::stream_profile& profile);
 

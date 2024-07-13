@@ -456,10 +456,16 @@ void BaseRealSenseNode::registerDynamicOption(ros::NodeHandle& nh, rs2::options 
         const std::string option_name(create_graph_resource_name(rs2_option_to_string(option)));
         try
         {
+          if(option == RS2_OPTION_EMITTER_ON_OFF && sensor.supports(option) && !sensor.is_option_read_only(option)) // hack emiiter on off
+                                                                                                                    // used for publish all frame when emitter on-off disabled
+            {
+                _emitter_on_off = (bool)sensor.get_option_value(option);
+            }
             if (!sensor.supports(option) || sensor.is_option_read_only(option))
             {
                 continue;
             }
+              
             if (is_checkbox(sensor, option))
             {
                 auto option_value = bool(sensor.get_option(option));
@@ -469,7 +475,14 @@ void BaseRealSenseNode::registerDynamicOption(ros::NodeHandle& nh, rs2::options 
                 }
                 ddynrec->registerVariable<bool>(
                 option_name, option_value,
-                [option, sensor](bool new_value) { sensor.set_option(option, new_value); },
+                [this, option, sensor](bool new_value) { 
+                    if (option==RS2_OPTION_EMITTER_ON_OFF)
+                    {
+                        _emitter_on_off = new_value;
+                        ROS_INFO("RS2_OPTION_EMITTER_ON_OFF");
+                        ROS_INFO("new_value: %d", new_value);
+                    }
+                    sensor.set_option(option, new_value); },
                 sensor.get_option_description(option));
                 continue;
             }
@@ -1730,6 +1743,11 @@ void BaseRealSenseNode::frame_callback(rs2::frame frame)
 
             ROS_DEBUG("List of frameset after applying filters: size: %d", static_cast<int>(frameset.size()));
             bool sent_depth_frame(false);
+            bool to_send_color_frame(false);
+            if(original_depth_frame&&original_depth_frame.get_frame_metadata(RS2_FRAME_METADATA_FRAME_EMITTER_MODE) == 1)
+            {
+                to_send_color_frame=true;
+            }
             for (auto it = frameset.begin(); it != frameset.end(); ++it)
             {
                 auto f = (*it);
@@ -1750,10 +1768,18 @@ void BaseRealSenseNode::frame_callback(rs2::frame frame)
                 }
                 if (stream_type == RS2_STREAM_DEPTH)
                 {
+                    if(f.get_frame_metadata(RS2_FRAME_METADATA_FRAME_EMITTER_MODE) != 1)
+                    {
+                        to_send_color_frame = false;
+                    }
+                    else{
+                        to_send_color_frame = true;
+                    }
                     if (sent_depth_frame) continue;
                     sent_depth_frame = true;
                     if (_align_depth && is_color_frame)
                     {
+
                         publishFrame(f, t, COLOR,
                                     _depth_aligned_image,
                                     _depth_aligned_info_publisher,
@@ -1761,9 +1787,14 @@ void BaseRealSenseNode::frame_callback(rs2::frame frame)
                                     false,
                                     _depth_aligned_seq,
                                     _depth_aligned_camera_info,
-                                    _depth_aligned_encoding);
+                                    _depth_aligned_encoding,true,true);
                         continue;
                     }
+                }
+                if(_align_depth && stream_type == RS2_STREAM_COLOR && not to_send_color_frame)
+                {
+                    // ROS_INFO("not aligned");
+                    continue;
                 }
                 publishFrame(f, t,
                                 sip,
@@ -1773,7 +1804,7 @@ void BaseRealSenseNode::frame_callback(rs2::frame frame)
                                 true,
                                 _seq,
                                 _camera_info,
-                                _encoding);
+                                _encoding,true,false);
             }
             if (original_depth_frame && _align_depth)
             {
@@ -1791,7 +1822,7 @@ void BaseRealSenseNode::frame_callback(rs2::frame frame)
                                 true,
                                 _seq,
                                 _camera_info,
-                                _encoding);
+                                _encoding,true,true);
             }
         }
         else if (frame.is<rs2::video_frame>())
@@ -1818,7 +1849,7 @@ void BaseRealSenseNode::frame_callback(rs2::frame frame)
                             true,
                             _seq,
                             _camera_info,
-                            _encoding);
+                            _encoding,true,false);
         }
     }
     catch(const std::exception& ex)
@@ -2416,7 +2447,7 @@ void BaseRealSenseNode::publishFrame(rs2::frame f, const ros::Time& t,
                                      std::map<stream_index_pair, int>& seq,
                                      std::map<stream_index_pair, sensor_msgs::CameraInfo>& camera_info,
                                      const std::map<rs2_stream, std::string>& encoding,
-                                     bool copy_data_from_frame)
+                                     bool copy_data_from_frame,bool is_align_depth_frame)
 {
     ROS_DEBUG("publishFrame(...)");
     unsigned int width = 0;
@@ -2460,17 +2491,13 @@ void BaseRealSenseNode::publishFrame(rs2::frame f, const ros::Time& t,
         cam_info.header.stamp = t;
         cam_info.header.seq = seq[stream];
         info_publisher.publish(cam_info);
-        ROS_INFO("emitter_mode: %lld", f.get_frame_metadata(RS2_FRAME_METADATA_FRAME_EMITTER_MODE));
-        if ( 
-             (stream.first == rs2_stream::RS2_STREAM_COLOR) || 
+        if ( !_emitter_on_off ||
+            ((!is_align_depth_frame)&&(stream.first == rs2_stream::RS2_STREAM_COLOR))||
+             (is_align_depth_frame&&stream.first == rs2_stream::RS2_STREAM_COLOR&&f.get_frame_metadata(RS2_FRAME_METADATA_FRAME_EMITTER_MODE ) == 1)||
+            //   stream.first == rs2_stream::RS2_STREAM_COLOR ||
              (stream.first == rs2_stream::RS2_STREAM_DEPTH    && f.get_frame_metadata(RS2_FRAME_METADATA_FRAME_EMITTER_MODE) == 1 ) ||
              (stream.first == rs2_stream::RS2_STREAM_INFRARED && f.get_frame_metadata(RS2_FRAME_METADATA_FRAME_EMITTER_MODE) != 1 ) )
         {
-            // if ( !_emitter_on_off || 
-            //  (stream.first == rs2_stream::RS2_STREAM_COLOR) || 
-            //  (stream.first == rs2_stream::RS2_STREAM_DEPTH     ) ||
-            //  (stream.first == rs2_stream::RS2_STREAM_INFRARED   ) )
-        // {
             sensor_msgs::ImagePtr img;
             img = cv_bridge::CvImage(std_msgs::Header(), encoding.at(stream.first), image).toImageMsg();
             img->width = width;
