@@ -9,7 +9,15 @@ LibRealSense2 supported version: from v2.50.0 to the most recent version (see [r
 
 
 ## Emitter on-off feature
-The structured light emitter will only be presented in half of the frames, enabling us to get good depth result while leaving no annoying structured light points in infra image. The structured light points would destroy your Vins estimitor.
+The structured light emitter will only be presented in half of the frames, enabling us to get good depth result while leaving no annoying structured light points in infra image. The structured light points would destroy your Vins estimitor. 60 FPS stream will be divided in to two parts, 30 frames for depth with emitter on, 30 frame for infra or color without emitter on.
+## Config Instruction
+The emiiter config arguments have depandence between one another. 
+The parameters must be set by ddynamic-reconfigure.
+1. adjust the exposure before set `emitter_on_off` feature on.
+2. It is suggested to first set `emitter_on_off` off, even if it is default off.
+3. `emitter_on_off` only work when `emitter_on` is set to 2 of 3.
+4. Please turn off `HDR_merge`. It may cause unexpected error.
+5. Even though rgb camera is not effect by structure light, in our inplementation, we half the frame rate of rgb camera to sync with depth. So it is ok to use `align_depth_to_color`.
 ## Installation Instructions
 ### Install librealsense SDK from Sources(If you need cuda support, please do build the lib from source)
 please refer to [Linux Ubuntu Installation](https://github.com/IntelRealSense/librealsense/blob/master/doc/installation.md)
