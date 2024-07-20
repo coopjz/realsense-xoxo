@@ -18,6 +18,7 @@ The parameters must be set by ddynamic-reconfigure.
 3. `emitter_on_off` only work when `emitter_on` is set to 2 of 3.
 4. Please turn off `HDR_merge`. It may cause unexpected error.
 5. Even though rgb camera is not effect by structure light, in our inplementation, we half the frame rate of rgb camera to sync with depth. So it is ok to use `align_depth_to_color`.
+
 ## Installation Instructions
 ### Install librealsense SDK from Sources(If you need cuda support, please do build the lib from source)
 please refer to [Linux Ubuntu Installation](https://github.com/IntelRealSense/librealsense/blob/master/doc/installation.md)
