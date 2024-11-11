@@ -456,10 +456,17 @@ void BaseRealSenseNode::registerDynamicOption(ros::NodeHandle& nh, rs2::options 
         const std::string option_name(create_graph_resource_name(rs2_option_to_string(option)));
         try
         {
-          if(option == RS2_OPTION_EMITTER_ON_OFF && sensor.supports(option) && !sensor.is_option_read_only(option)) // hack emiiter on off
+            if(option == RS2_OPTION_EMITTER_ON_OFF && sensor.supports(option) && !sensor.is_option_read_only(option)) // hack emiiter on off
                                                                                                                     // used for publish all frame when emitter on-off disabled
             {
-                _emitter_on_off = (bool)sensor.get_option_value(option);
+                auto option_value = bool(sensor.get_option(option));
+                //option_value type is rs2_option_value
+                if (nh1.param(option_name, option_value, option_value))
+                {
+                    sensor.set_option(option, option_value);
+                }
+                _emitter_on_off = option_value;
+                ROS_INFO("RS2_OPTION_EMITTER_ON_OFF %d", _emitter_on_off);
             }
             if (!sensor.supports(option) || sensor.is_option_read_only(option))
             {
@@ -2508,8 +2515,9 @@ void BaseRealSenseNode::publishFrame(rs2::frame f, const ros::Time& t,
             img->header.stamp = t;
             img->header.seq = seq[stream];
             image_publisher.first.publish(img);
+            
+             ROS_DEBUG("%s stream published", rs2_stream_to_string(f.get_profile().stream_type()));
         }
-        ROS_DEBUG("%s stream published", rs2_stream_to_string(f.get_profile().stream_type()));
     }
     if (is_publishMetadata)
     {
